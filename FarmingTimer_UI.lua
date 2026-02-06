@@ -5,6 +5,10 @@ local ITEM_BUTTON_SIZE = 24
 local ITEM_ID_WIDTH = 150
 local TARGET_WIDTH = 60
 local CURRENT_WIDTH = 90
+local FRAME_WIDTH = 460
+local FRAME_HEIGHT = 360
+local FRAME_MIN_HEIGHT = 300
+local FRAME_MAX_HEIGHT = 700
 
 local function positionRow(row, index)
     row:ClearAllPoints()
@@ -231,6 +235,17 @@ function FT:SaveFramePosition()
         self.db.frame.point = point
         self.db.frame.x = math.floor(x + 0.5)
         self.db.frame.y = math.floor(y + 0.5)
+    end
+end
+
+function FT:SaveFrameSize()
+    if not self.frame or not self.db then
+        return
+    end
+    local height = self.frame:GetHeight()
+    if height then
+        height = math.max(FRAME_MIN_HEIGHT, math.min(height, FRAME_MAX_HEIGHT))
+        self.db.frame.height = math.floor(height + 0.5)
     end
 end
 
@@ -581,7 +596,9 @@ function FT:InitUI()
     end
 
     local frame = CreateFrame("Frame", "FarmingTimerFrame", UIParent, "BackdropTemplate")
-    frame:SetSize(460, 360)
+    local height = self.db.frame.height or FRAME_HEIGHT
+    height = math.max(FRAME_MIN_HEIGHT, math.min(height, FRAME_MAX_HEIGHT))
+    frame:SetSize(FRAME_WIDTH, height)
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -599,6 +616,19 @@ function FT:InitUI()
         FT:SaveFramePosition()
     end)
     frame:SetClampedToScreen(true)
+    frame:SetResizable(true)
+    if frame.SetResizeBounds then
+        frame:SetResizeBounds(FRAME_WIDTH, FRAME_MIN_HEIGHT, FRAME_WIDTH, FRAME_MAX_HEIGHT)
+    else
+        frame:SetMinResize(FRAME_WIDTH, FRAME_MIN_HEIGHT)
+        frame:SetMaxResize(FRAME_WIDTH, FRAME_MAX_HEIGHT)
+    end
+    frame:SetScript("OnSizeChanged", function(self, width, height)
+        if width and math.abs(width - FRAME_WIDTH) > 0.5 then
+            self:SetWidth(FRAME_WIDTH)
+        end
+        FT:SaveFrameSize()
+    end)
 
     frame:SetScript("OnShow", function()
         if FT.db then
@@ -625,6 +655,26 @@ function FT:InitUI()
 
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", -6, -6)
+
+    local resizeHandle = CreateFrame("Button", nil, frame)
+    resizeHandle:SetSize(16, 16)
+    resizeHandle:SetPoint("BOTTOMLEFT", 6, 6)
+    resizeHandle:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resizeHandle:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resizeHandle:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    resizeHandle:SetScript("OnMouseDown", function(_, button)
+        if button ~= "LeftButton" then
+            return
+        end
+        frame:StartSizing("BOTTOM")
+    end)
+    resizeHandle:SetScript("OnMouseUp", function(_, button)
+        if button ~= "LeftButton" then
+            return
+        end
+        frame:StopMovingOrSizing()
+        FT:SaveFrameSize()
+    end)
 
     frame.timerText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     frame.timerText:SetPoint("TOP", title, "BOTTOM", 0, -8)

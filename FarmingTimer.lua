@@ -7,7 +7,7 @@ FT.addonName = ADDON_NAME
 local DEFAULTS = {
     version = 1,
     items = {},
-    frame = { point = "CENTER", x = 0, y = 0 },
+    frame = { point = "CENTER", x = 0, y = 0, height = 360 },
     visible = true,
     minimap = { hide = false, minimapPos = 220 },
     lastPreset = nil,
