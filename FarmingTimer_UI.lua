@@ -1,0 +1,456 @@
+local ADDON_NAME, FT = ...
+
+local ROW_HEIGHT = 28
+local ITEM_BUTTON_SIZE = 24
+local ITEM_ID_WIDTH = 150
+local TARGET_WIDTH = 60
+local CURRENT_WIDTH = 90
+
+local function positionRow(row, index)
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", 0, -((index - 1) * ROW_HEIGHT))
+    row:SetPoint("TOPRIGHT", 0, -((index - 1) * ROW_HEIGHT))
+end
+
+local function setEditBoxEnabled(editBox, enabled)
+    if enabled then
+        editBox:EnableMouse(true)
+        editBox:SetTextColor(1, 1, 1)
+    else
+        editBox:EnableMouse(false)
+        editBox:SetTextColor(0.6, 0.6, 0.6)
+        editBox:ClearFocus()
+    end
+end
+
+function FT:SetTimerText(text)
+    if self.frame and self.frame.timerText then
+        self.frame.timerText:SetText(text or "00:00")
+    end
+end
+
+function FT:SaveFramePosition()
+    if not self.frame or not self.db then
+        return
+    end
+    local point, _, _, x, y = self.frame:GetPoint(1)
+    if point then
+        self.db.frame.point = point
+        self.db.frame.x = math.floor(x + 0.5)
+        self.db.frame.y = math.floor(y + 0.5)
+    end
+end
+
+function FT:ResetFramePosition()
+    if not self.frame or not self.db then
+        return
+    end
+    self.db.frame.point = "CENTER"
+    self.db.frame.x = 0
+    self.db.frame.y = 0
+    self.frame:ClearAllPoints()
+    self.frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+end
+
+function FT:RequestItemData(itemID)
+    if not itemID then
+        return
+    end
+    if C_Item and C_Item.RequestLoadItemDataByID then
+        C_Item.RequestLoadItemDataByID(itemID)
+    end
+end
+
+function FT:SetRowItem(row, itemID)
+    row.data.itemID = itemID
+    row.itemIDBox:SetText(itemID and tostring(itemID) or "")
+    self:RequestItemData(itemID)
+    self:UpdateRow(row)
+    self:RefreshProgress()
+end
+
+function FT:CommitItemID(row)
+    local text = row.itemIDBox:GetText()
+    local itemID = self:ResolveItemID(text)
+    if itemID then
+        row.data.itemID = itemID
+        row.itemIDBox:SetText(tostring(itemID))
+        self:RequestItemData(itemID)
+    else
+        row.data.itemID = nil
+        row.itemIDBox:SetText("")
+    end
+    self:UpdateRow(row)
+    self:RefreshProgress()
+end
+
+function FT:CommitTarget(row)
+    local text = row.targetBox:GetText()
+    local target = tonumber(text)
+    if target and target > 0 then
+        row.data.target = math.floor(target)
+        row.targetBox:SetText(tostring(row.data.target))
+    else
+        row.data.target = 0
+        row.targetBox:SetText("")
+    end
+    self:UpdateRow(row)
+    self:RefreshProgress()
+end
+
+function FT:HandleItemCursor(row)
+    if self.running then
+        return
+    end
+    local infoType, itemID, itemLink = GetCursorInfo()
+    if infoType == "item" then
+        local resolved = itemID
+        if not resolved and itemLink then
+            resolved = self:ResolveItemID(itemLink)
+        end
+        if resolved then
+            ClearCursor()
+            self:SetRowItem(row, resolved)
+        end
+    end
+end
+
+function FT:CreateRow(index)
+    local row = CreateFrame("Frame", nil, self.listContent)
+    row:SetHeight(ROW_HEIGHT)
+    positionRow(row, index)
+
+    row.itemButton = CreateFrame("Button", nil, row, "BackdropTemplate")
+    row.itemButton:SetSize(ITEM_BUTTON_SIZE, ITEM_BUTTON_SIZE)
+    row.itemButton:SetPoint("LEFT", 2, 0)
+    row.itemButton:SetBackdrop({
+        bgFile = "Interface\\Buttons\\UI-Quickslot2",
+        edgeFile = "Interface\\Buttons\\UI-Quickslot2",
+        tile = false,
+        edgeSize = 16,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+
+    row.itemButton.icon = row.itemButton:CreateTexture(nil, "ARTWORK")
+    row.itemButton.icon:SetAllPoints()
+    row.itemButton.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    row.itemButton:RegisterForClicks("LeftButtonUp")
+    row.itemButton:RegisterForDrag("LeftButton")
+    row.itemButton:SetScript("OnReceiveDrag", function()
+        FT:HandleItemCursor(row)
+    end)
+    row.itemButton:SetScript("OnMouseUp", function(_, button)
+        if button == "LeftButton" then
+            FT:HandleItemCursor(row)
+        end
+    end)
+    row.itemButton:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if row.data and row.data.itemID then
+            if GameTooltip.SetItemByID then
+                GameTooltip:SetItemByID(row.data.itemID)
+            else
+                GameTooltip:SetHyperlink("item:" .. row.data.itemID)
+            end
+        else
+            GameTooltip:AddLine("Drag an item here")
+        end
+        GameTooltip:Show()
+    end)
+    row.itemButton:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+
+    row.itemIDBox = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+    row.itemIDBox:SetSize(ITEM_ID_WIDTH, 20)
+    row.itemIDBox:SetPoint("LEFT", row.itemButton, "RIGHT", 8, 0)
+    row.itemIDBox:SetAutoFocus(false)
+    row.itemIDBox:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+        FT:CommitItemID(row)
+    end)
+    row.itemIDBox:SetScript("OnEditFocusLost", function()
+        FT:CommitItemID(row)
+    end)
+
+    row.targetBox = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+    row.targetBox:SetSize(TARGET_WIDTH, 20)
+    row.targetBox:SetPoint("LEFT", row.itemIDBox, "RIGHT", 8, 0)
+    row.targetBox:SetAutoFocus(false)
+    row.targetBox:SetNumeric(true)
+    row.targetBox:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+        FT:CommitTarget(row)
+    end)
+    row.targetBox:SetScript("OnEditFocusLost", function()
+        FT:CommitTarget(row)
+    end)
+
+    row.currentText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    row.currentText:SetWidth(CURRENT_WIDTH)
+    row.currentText:SetJustifyH("LEFT")
+    row.currentText:SetPoint("LEFT", row.targetBox, "RIGHT", 12, 0)
+
+    row.removeButton = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    row.removeButton:SetSize(22, 20)
+    row.removeButton:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+    row.removeButton:SetText("X")
+    row.removeButton:SetScript("OnClick", function()
+        if FT.running then
+            return
+        end
+        table.remove(FT.db.items, row.index)
+        FT:RefreshList()
+    end)
+
+    self.rows[index] = row
+    return row
+end
+
+function FT:UpdateRow(row)
+    if not row or not row.data then
+        return
+    end
+
+    local itemID = row.data.itemID
+    if not row.itemIDBox:HasFocus() then
+        row.itemIDBox:SetText(itemID and tostring(itemID) or "")
+    end
+    if not row.targetBox:HasFocus() then
+        local target = tonumber(row.data.target)
+        row.targetBox:SetText(target and target > 0 and tostring(target) or "")
+    end
+
+    if itemID then
+        local name, link, _, _, _, _, _, _, _, icon = GetItemInfo(itemID)
+        if icon then
+            row.itemButton.icon:SetTexture(icon)
+            row.itemButton.icon:SetDesaturated(false)
+        else
+            row.itemButton.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+            row.itemButton.icon:SetDesaturated(false)
+            self:RequestItemData(itemID)
+        end
+    else
+        row.itemButton.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+        row.itemButton.icon:SetDesaturated(true)
+    end
+
+    local current = tonumber(row.data.current) or 0
+    local target = tonumber(row.data.target) or 0
+    if target > 0 then
+        row.currentText:SetText(string.format("%d / %d", current, target))
+        if current >= target then
+            row.currentText:SetTextColor(0.2, 1.0, 0.2)
+        else
+            row.currentText:SetTextColor(1, 1, 1)
+        end
+    else
+        row.currentText:SetText("-")
+        row.currentText:SetTextColor(0.7, 0.7, 0.7)
+    end
+end
+
+function FT:UpdateRows()
+    if not self.db or not self.listContent then
+        return
+    end
+
+    local items = self.db.items
+    for i, item in ipairs(items) do
+        local row = self.rows[i] or self:CreateRow(i)
+        row.index = i
+        row.data = item
+        positionRow(row, i)
+        row:Show()
+        self:UpdateRow(row)
+    end
+
+    for i = #items + 1, #self.rows do
+        self.rows[i]:Hide()
+    end
+
+    local height = math.max(1, #items * ROW_HEIGHT)
+    self.listContent:SetHeight(height)
+end
+
+function FT:UpdateSummary(completed, valid)
+    if not self.frame or not self.frame.statusText then
+        return
+    end
+    if valid == 0 then
+        self.frame.statusText:SetText("No items configured")
+        return
+    end
+    self.frame.statusText:SetText(string.format("%d / %d items completed", completed, valid))
+end
+
+function FT:UpdateControls()
+    if not self.frame then
+        return
+    end
+
+    self.frame.startButton:SetEnabled(not self.running)
+    self.frame.stopButton:SetEnabled(self.running)
+    self.frame.resetButton:SetEnabled(not self.running)
+    self.frame.addButton:SetEnabled(not self.running)
+
+    for _, row in ipairs(self.rows) do
+        row.itemButton:SetEnabled(not self.running)
+        row.removeButton:SetEnabled(not self.running)
+        setEditBoxEnabled(row.itemIDBox, not self.running)
+        setEditBoxEnabled(row.targetBox, not self.running)
+    end
+end
+
+function FT:RefreshList()
+    if not self.db then
+        return
+    end
+    self.db.items = self.db.items or {}
+    self:UpdateRows()
+    self:UpdateSummary(0, self:GetValidCount())
+end
+
+function FT:InitUI()
+    if self.frame then
+        return
+    end
+
+    local frame = CreateFrame("Frame", "FarmingTimerFrame", UIParent, "BackdropTemplate")
+    frame:SetSize(460, 360)
+    frame:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true,
+        tileSize = 32,
+        edgeSize = 32,
+        insets = { left = 8, right = 8, top = 8, bottom = 8 },
+    })
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        FT:SaveFramePosition()
+    end)
+    frame:SetClampedToScreen(true)
+
+    frame:SetScript("OnShow", function()
+        if FT.db then
+            FT.db.visible = true
+        end
+    end)
+    frame:SetScript("OnHide", function()
+        if FT.db then
+            FT.db.visible = false
+        end
+    end)
+
+    self.frame = frame
+    self.rows = {}
+
+    local point = self.db.frame.point or "CENTER"
+    local x = self.db.frame.x or 0
+    local y = self.db.frame.y or 0
+    frame:SetPoint(point, UIParent, point, x, y)
+
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOP", 0, -10)
+    title:SetText("FarmingTimer")
+
+    local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    closeButton:SetPoint("TOPRIGHT", -6, -6)
+
+    frame.timerText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    frame.timerText:SetPoint("TOP", title, "BOTTOM", 0, -8)
+    frame.timerText:SetText("00:00")
+
+    frame.statusText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.statusText:SetPoint("TOP", frame.timerText, "BOTTOM", 0, -6)
+    frame.statusText:SetText("No items configured")
+
+    local header = CreateFrame("Frame", nil, frame)
+    header:SetPoint("TOPLEFT", 18, -78)
+    header:SetPoint("TOPRIGHT", -34, -78)
+    header:SetHeight(16)
+
+    local headerItem = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    headerItem:SetPoint("LEFT", 2, 0)
+    headerItem:SetText("Item")
+
+    local headerID = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    headerID:SetPoint("LEFT", headerItem, "RIGHT", 26 + 8, 0)
+    headerID:SetText("ItemID / Link")
+
+    local headerTarget = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    headerTarget:SetPoint("LEFT", headerID, "RIGHT", ITEM_ID_WIDTH - 20, 0)
+    headerTarget:SetText("Target")
+
+    local headerCurrent = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    headerCurrent:SetPoint("LEFT", headerTarget, "RIGHT", TARGET_WIDTH + 10, 0)
+    headerCurrent:SetText("Progress")
+
+    local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", 18, -96)
+    scrollFrame:SetPoint("BOTTOMRIGHT", -34, 54)
+
+    local content = CreateFrame("Frame", nil, scrollFrame)
+    content:SetSize(1, 1)
+    scrollFrame:SetScrollChild(content)
+    scrollFrame:SetScript("OnSizeChanged", function(_, width)
+        content:SetWidth(width)
+    end)
+    content:SetWidth(scrollFrame:GetWidth())
+
+    self.listScrollFrame = scrollFrame
+    self.listContent = content
+
+    frame.addButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.addButton:SetSize(90, 22)
+    frame.addButton:SetPoint("BOTTOMLEFT", 18, 18)
+    frame.addButton:SetText("Add Item")
+    frame.addButton:SetScript("OnClick", function()
+        if FT.running then
+            return
+        end
+        table.insert(FT.db.items, { itemID = nil, target = 0 })
+        FT:RefreshList()
+    end)
+
+    frame.startButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.startButton:SetSize(80, 22)
+    frame.startButton:SetPoint("BOTTOM", -90, 18)
+    frame.startButton:SetText("Start")
+    frame.startButton:SetScript("OnClick", function()
+        FT:StartRun()
+    end)
+
+    frame.stopButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.stopButton:SetSize(80, 22)
+    frame.stopButton:SetPoint("BOTTOM", 0, 18)
+    frame.stopButton:SetText("Stop")
+    frame.stopButton:SetScript("OnClick", function()
+        FT:StopRun()
+    end)
+
+    frame.resetButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.resetButton:SetSize(80, 22)
+    frame.resetButton:SetPoint("BOTTOM", 90, 18)
+    frame.resetButton:SetText("Reset")
+    frame.resetButton:SetScript("OnClick", function()
+        FT:ResetRun()
+    end)
+
+    self:RefreshList()
+    self:UpdateControls()
+    self:UpdateTimer()
+
+    if self.db.visible then
+        frame:Show()
+    else
+        frame:Hide()
+    end
+end
