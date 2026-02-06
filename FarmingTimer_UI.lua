@@ -23,6 +23,44 @@ local function setEditBoxEnabled(editBox, enabled)
     end
 end
 
+function FT:RefreshPresetDropdown()
+    if not self.frame or not self.frame.presetDropdown then
+        return
+    end
+
+    UIDropDownMenu_Initialize(self.frame.presetDropdown, function(_, level)
+        local names = FT:GetPresetNamesSorted()
+        if #names == 0 then
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = "No presets"
+            info.disabled = true
+            UIDropDownMenu_AddButton(info, level)
+            return
+        end
+
+        for _, name in ipairs(names) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = name
+            info.value = name
+            info.func = function()
+                FT:SetSelectedPreset(name)
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    local selected = self.selectedPreset or (self.db and self.db.lastPreset)
+    if selected and self.accountDb and self.accountDb.presets and self.accountDb.presets[selected] then
+        self:SetSelectedPreset(selected)
+    else
+        UIDropDownMenu_SetSelectedValue(self.frame.presetDropdown, nil)
+        UIDropDownMenu_SetText(self.frame.presetDropdown, "Select")
+        if self.frame.presetNameBox and not self.frame.presetNameBox:HasFocus() then
+            self.frame.presetNameBox:SetText("")
+        end
+    end
+end
+
 function FT:SetTimerText(text)
     if self.frame and self.frame.timerText then
         self.frame.timerText:SetText(text or "00:00")
@@ -306,6 +344,26 @@ function FT:UpdateControls()
     self.frame.resetButton:SetEnabled(not isRunning)
     self.frame.addButton:SetEnabled(not isRunning)
 
+    if self.frame.presetDropdown then
+        if isRunning then
+            UIDropDownMenu_DisableDropDown(self.frame.presetDropdown)
+        else
+            UIDropDownMenu_EnableDropDown(self.frame.presetDropdown)
+        end
+    end
+    if self.frame.presetNameBox then
+        setEditBoxEnabled(self.frame.presetNameBox, not isRunning)
+    end
+    if self.frame.presetSaveButton then
+        self.frame.presetSaveButton:SetEnabled(not isRunning)
+    end
+    if self.frame.presetLoadButton then
+        self.frame.presetLoadButton:SetEnabled(not isRunning)
+    end
+    if self.frame.presetDeleteButton then
+        self.frame.presetDeleteButton:SetEnabled(not isRunning)
+    end
+
     for _, row in ipairs(self.rows) do
         row.itemButton:SetEnabled(not isRunning)
         row.removeButton:SetEnabled(not isRunning)
@@ -382,9 +440,60 @@ function FT:InitUI()
     frame.statusText:SetPoint("TOP", frame.timerText, "BOTTOM", 0, -6)
     frame.statusText:SetText("No items configured")
 
+    local presetRow = CreateFrame("Frame", nil, frame)
+    presetRow:SetPoint("TOPLEFT", 18, -72)
+    presetRow:SetPoint("TOPRIGHT", -18, -72)
+    presetRow:SetHeight(26)
+
+    local presetLabel = presetRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    presetLabel:SetPoint("LEFT", 2, 0)
+    presetLabel:SetText("Preset")
+
+    local presetDropdown = CreateFrame("Frame", "FarmingTimerPresetDropDown", presetRow, "UIDropDownMenuTemplate")
+    presetDropdown:SetPoint("LEFT", presetLabel, "RIGHT", -6, -2)
+    UIDropDownMenu_SetWidth(presetDropdown, 90)
+    UIDropDownMenu_SetText(presetDropdown, "Select")
+
+    local presetNameBox
+
+    local deleteButton = CreateFrame("Button", nil, presetRow, "UIPanelButtonTemplate")
+    deleteButton:SetSize(46, 20)
+    deleteButton:SetPoint("RIGHT", presetRow, "RIGHT", -2, 0)
+    deleteButton:SetText("Delete")
+    deleteButton:SetScript("OnClick", function()
+        FT:DeletePreset(presetNameBox:GetText())
+    end)
+
+    local loadButton = CreateFrame("Button", nil, presetRow, "UIPanelButtonTemplate")
+    loadButton:SetSize(46, 20)
+    loadButton:SetPoint("RIGHT", deleteButton, "LEFT", -6, 0)
+    loadButton:SetText("Load")
+    loadButton:SetScript("OnClick", function()
+        FT:LoadPreset(presetNameBox:GetText())
+    end)
+
+    local saveButton = CreateFrame("Button", nil, presetRow, "UIPanelButtonTemplate")
+    saveButton:SetSize(46, 20)
+    saveButton:SetPoint("RIGHT", loadButton, "LEFT", -6, 0)
+    saveButton:SetText("Save")
+    saveButton:SetScript("OnClick", function()
+        FT:SavePreset(presetNameBox:GetText())
+    end)
+
+    presetNameBox = CreateFrame("EditBox", nil, presetRow, "InputBoxTemplate")
+    presetNameBox:SetSize(90, 20)
+    presetNameBox:SetPoint("RIGHT", saveButton, "LEFT", -8, 0)
+    presetNameBox:SetAutoFocus(false)
+
+    frame.presetDropdown = presetDropdown
+    frame.presetNameBox = presetNameBox
+    frame.presetSaveButton = saveButton
+    frame.presetLoadButton = loadButton
+    frame.presetDeleteButton = deleteButton
+
     local header = CreateFrame("Frame", nil, frame)
-    header:SetPoint("TOPLEFT", 18, -78)
-    header:SetPoint("TOPRIGHT", -34, -78)
+    header:SetPoint("TOPLEFT", 18, -108)
+    header:SetPoint("TOPRIGHT", -34, -108)
     header:SetHeight(16)
 
     local headerItem = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -404,7 +513,7 @@ function FT:InitUI()
     headerCurrent:SetText("Progress")
 
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 18, -96)
+    scrollFrame:SetPoint("TOPLEFT", 18, -126)
     scrollFrame:SetPoint("BOTTOMRIGHT", -34, 54)
 
     local content = CreateFrame("Frame", nil, scrollFrame)
@@ -465,6 +574,7 @@ function FT:InitUI()
     self:RefreshList()
     self:UpdateControls()
     self:UpdateTimer()
+    self:RefreshPresetDropdown()
 
     if self.db.visible then
         frame:Show()
