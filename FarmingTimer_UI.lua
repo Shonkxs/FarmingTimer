@@ -382,15 +382,15 @@ function FT:InitUI()
     headerItem:SetText("Item")
 
     local headerID = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    headerID:SetPoint("LEFT", headerItem, "RIGHT", 26 + 8, 0)
+    headerID:SetPoint("LEFT", header, "LEFT", 2 + ITEM_BUTTON_SIZE + 8, 0)
     headerID:SetText("ItemID / Link")
 
     local headerTarget = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    headerTarget:SetPoint("LEFT", headerID, "RIGHT", ITEM_ID_WIDTH - 20, 0)
-    headerTarget:SetText("Target")
+    headerTarget:SetPoint("LEFT", header, "LEFT", 2 + ITEM_BUTTON_SIZE + 8 + ITEM_ID_WIDTH + 8, 0)
+    headerTarget:SetText("Anzahl")
 
     local headerCurrent = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    headerCurrent:SetPoint("LEFT", headerTarget, "RIGHT", TARGET_WIDTH + 10, 0)
+    headerCurrent:SetPoint("LEFT", header, "LEFT", 2 + ITEM_BUTTON_SIZE + 8 + ITEM_ID_WIDTH + 8 + TARGET_WIDTH + 12, 0)
     headerCurrent:SetText("Progress")
 
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
