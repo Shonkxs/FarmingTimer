@@ -90,7 +90,11 @@ function FT:GetValidCount()
 end
 
 function FT:StartRun()
-    if self.running then
+    if self.running and not self.paused then
+        return
+    end
+    if self.running and self.paused then
+        self:ResumeRun()
         return
     end
 
@@ -110,11 +114,41 @@ function FT:StartRun()
     end
 
     self.running = true
+    self.paused = false
     self.startTime = GetTime()
     self.elapsed = 0
 
     self:StartTicker()
     self:RefreshProgress()
+    if self.UpdateControls then
+        self:UpdateControls()
+    end
+end
+
+function FT:PauseRun()
+    if not self.running or self.paused then
+        return
+    end
+    if self.startTime then
+        self.elapsed = (self.elapsed or 0) + (GetTime() - self.startTime)
+    end
+    self.startTime = nil
+    self.paused = true
+    self:StopTicker()
+    self:UpdateTimer()
+    if self.UpdateControls then
+        self:UpdateControls()
+    end
+end
+
+function FT:ResumeRun()
+    if not self.running or not self.paused then
+        return
+    end
+    self.paused = false
+    self.startTime = GetTime()
+    self:StartTicker()
+    self:UpdateTimer()
     if self.UpdateControls then
         self:UpdateControls()
     end
@@ -126,12 +160,14 @@ function FT:StopRun()
     end
 
     if self.startTime then
-        self.elapsed = GetTime() - self.startTime
+        self.elapsed = (self.elapsed or 0) + (GetTime() - self.startTime)
     end
 
     self.running = false
+    self.paused = false
     self.startTime = nil
     self:StopTicker()
+    self:UpdateTimer()
 
     if self.UpdateControls then
         self:UpdateControls()
@@ -141,6 +177,7 @@ end
 function FT:ResetRun()
     self:StopRun()
     self.elapsed = 0
+    self.paused = false
     self.baseline = {}
     for _, item in ipairs(self.db.items) do
         item.current = 0
@@ -174,7 +211,7 @@ end
 function FT:UpdateTimer()
     local elapsed = self.elapsed or 0
     if self.running and self.startTime then
-        elapsed = GetTime() - self.startTime
+        elapsed = elapsed + (GetTime() - self.startTime)
     end
     if self.SetTimerText then
         self:SetTimerText(self:FormatElapsed(elapsed))
@@ -210,7 +247,7 @@ function FT:RefreshProgress()
         self:UpdateSummary(completed, valid)
     end
 
-    if self.running and valid > 0 and completed == valid then
+    if self.running and not self.paused and valid > 0 and completed == valid then
         self:CompleteRun()
     end
 end

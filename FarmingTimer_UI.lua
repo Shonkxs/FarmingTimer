@@ -291,16 +291,26 @@ function FT:UpdateControls()
         return
     end
 
-    self.frame.startButton:SetEnabled(not self.running)
-    self.frame.stopButton:SetEnabled(self.running)
-    self.frame.resetButton:SetEnabled(not self.running)
-    self.frame.addButton:SetEnabled(not self.running)
+    local isRunning = self.running
+    local isPaused = self.paused
+
+    if isPaused then
+        self.frame.startButton:SetText("Resume")
+    else
+        self.frame.startButton:SetText("Start")
+    end
+
+    self.frame.startButton:SetEnabled(not isRunning or isPaused)
+    self.frame.pauseButton:SetEnabled(isRunning and not isPaused)
+    self.frame.stopButton:SetEnabled(isRunning)
+    self.frame.resetButton:SetEnabled(not isRunning)
+    self.frame.addButton:SetEnabled(not isRunning)
 
     for _, row in ipairs(self.rows) do
-        row.itemButton:SetEnabled(not self.running)
-        row.removeButton:SetEnabled(not self.running)
-        setEditBoxEnabled(row.itemIDBox, not self.running)
-        setEditBoxEnabled(row.targetBox, not self.running)
+        row.itemButton:SetEnabled(not isRunning)
+        row.removeButton:SetEnabled(not isRunning)
+        setEditBoxEnabled(row.itemIDBox, not isRunning)
+        setEditBoxEnabled(row.targetBox, not isRunning)
     end
 end
 
@@ -421,24 +431,32 @@ function FT:InitUI()
     end)
 
     frame.startButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.startButton:SetSize(80, 22)
-    frame.startButton:SetPoint("BOTTOM", -90, 18)
+    frame.startButton:SetSize(70, 22)
+    frame.startButton:SetPoint("LEFT", frame.addButton, "RIGHT", 12, 0)
     frame.startButton:SetText("Start")
     frame.startButton:SetScript("OnClick", function()
         FT:StartRun()
     end)
 
+    frame.pauseButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.pauseButton:SetSize(70, 22)
+    frame.pauseButton:SetPoint("LEFT", frame.startButton, "RIGHT", 12, 0)
+    frame.pauseButton:SetText("Pause")
+    frame.pauseButton:SetScript("OnClick", function()
+        FT:PauseRun()
+    end)
+
     frame.stopButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.stopButton:SetSize(80, 22)
-    frame.stopButton:SetPoint("BOTTOM", 0, 18)
+    frame.stopButton:SetSize(70, 22)
+    frame.stopButton:SetPoint("LEFT", frame.pauseButton, "RIGHT", 12, 0)
     frame.stopButton:SetText("Stop")
     frame.stopButton:SetScript("OnClick", function()
         FT:StopRun()
     end)
 
     frame.resetButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.resetButton:SetSize(80, 22)
-    frame.resetButton:SetPoint("BOTTOM", 90, 18)
+    frame.resetButton:SetSize(70, 22)
+    frame.resetButton:SetPoint("LEFT", frame.stopButton, "RIGHT", 12, 0)
     frame.resetButton:SetText("Reset")
     frame.resetButton:SetScript("OnClick", function()
         FT:ResetRun()
