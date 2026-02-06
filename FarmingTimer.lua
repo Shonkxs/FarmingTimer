@@ -166,7 +166,7 @@ function FT:BuildExportString(names)
         if type(items) == "table" then
             local itemParts = {}
             for _, item in ipairs(items) do
-                local itemID = tonumber(item.itemID)
+                local itemID = self:ResolveItemID(item.itemID)
                 local target = tonumber(item.target) or 0
                 if itemID and itemID > 0 then
                     if target < 0 then
@@ -474,8 +474,9 @@ function FT:SavePreset(name)
 
     local items = {}
     for _, item in ipairs(self.db.items) do
-        if self:IsTrackableItem(item) then
-            table.insert(items, { itemID = tonumber(item.itemID), target = tonumber(item.target) or 0 })
+        local itemID = self:GetItemIDFromItem(item)
+        if itemID and itemID > 0 then
+            table.insert(items, { itemID = itemID, target = tonumber(item.target) or 0 })
         end
     end
 
@@ -516,7 +517,7 @@ function FT:LoadPreset(name)
 
     local items = {}
     for _, entry in ipairs(preset) do
-        local itemID = tonumber(entry.itemID)
+        local itemID = self:ResolveItemID(entry.itemID)
         local target = tonumber(entry.target) or 0
         if itemID and itemID > 0 then
             table.insert(items, { itemID = itemID, target = target })
@@ -595,6 +596,17 @@ function FT:ResolveItemID(value)
     return nil
 end
 
+function FT:GetItemIDFromItem(item)
+    if not item then
+        return nil
+    end
+    local itemID = self:ResolveItemID(item.itemID)
+    if itemID and item.itemID ~= itemID then
+        item.itemID = itemID
+    end
+    return itemID
+end
+
 function FT:FormatElapsed(seconds)
     seconds = math.max(0, math.floor(seconds or 0))
     if seconds >= 3600 then
@@ -612,7 +624,7 @@ function FT:IsValidItem(item)
     if not item then
         return false
     end
-    local itemID = tonumber(item.itemID)
+    local itemID = self:GetItemIDFromItem(item)
     local target = tonumber(item.target)
     return itemID and itemID > 0 and target and target > 0
 end
@@ -621,7 +633,7 @@ function FT:IsTrackableItem(item)
     if not item then
         return false
     end
-    local itemID = tonumber(item.itemID)
+    local itemID = self:GetItemIDFromItem(item)
     return itemID and itemID > 0
 end
 
@@ -670,7 +682,7 @@ function FT:StartRun()
     self.baseline = {}
     for i, item in ipairs(self.db.items) do
         if self:IsTrackableItem(item) then
-            local itemID = tonumber(item.itemID)
+            local itemID = self:GetItemIDFromItem(item)
             self.baseline[i] = GetItemCount(itemID, false)
         else
             self.baseline[i] = 0
@@ -792,7 +804,7 @@ function FT:RefreshProgress()
         local current = 0
         if self:IsTrackableItem(item) then
             trackable = trackable + 1
-            local itemID = tonumber(item.itemID)
+            local itemID = self:GetItemIDFromItem(item)
             local base = self.baseline and self.baseline[i] or 0
             if self.running then
                 current = GetItemCount(itemID, false) - base

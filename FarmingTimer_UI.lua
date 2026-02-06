@@ -47,7 +47,7 @@ function FT:RefreshPresetDropdown()
             info.text = name
             info.value = name
             info.func = function()
-                FT:SetSelectedPreset(name)
+                FT:LoadPreset(name)
             end
             UIDropDownMenu_AddButton(info, level)
         end
