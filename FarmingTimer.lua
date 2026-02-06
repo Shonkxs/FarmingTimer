@@ -10,6 +10,7 @@ local DEFAULTS = {
     frame = { point = "CENTER", x = 0, y = 0 },
     visible = true,
     minimap = { hide = false, minimapPos = 220 },
+    lastPreset = nil,
 }
 
 local function copyDefaults(dst, src)
@@ -33,6 +34,165 @@ function FT:InitDB()
     copyDefaults(FarmingTimerDB, DEFAULTS)
     self.db = FarmingTimerDB
     self.accountDb = FarmingTimerAccountDB
+    self.accountDb.presets = self.accountDb.presets or {}
+end
+
+function FT:NormalizePresetName(name)
+    if not name then
+        return nil
+    end
+    if strtrim then
+        name = strtrim(name)
+    else
+        name = name:gsub("^%s+", ""):gsub("%s+$", "")
+    end
+    if name == "" then
+        return nil
+    end
+    return name
+end
+
+function FT:GetPresetNamesSorted()
+    local names = {}
+    if not self.accountDb or not self.accountDb.presets then
+        return names
+    end
+    for name in pairs(self.accountDb.presets) do
+        table.insert(names, name)
+    end
+    table.sort(names, function(a, b)
+        return string.lower(a) < string.lower(b)
+    end)
+    return names
+end
+
+function FT:SetSelectedPreset(name)
+    self.selectedPreset = name
+    if self.frame and self.frame.presetDropdown then
+        if name and self.accountDb.presets[name] then
+            UIDropDownMenu_SetSelectedValue(self.frame.presetDropdown, name)
+            UIDropDownMenu_SetText(self.frame.presetDropdown, name)
+        else
+            UIDropDownMenu_SetSelectedValue(self.frame.presetDropdown, nil)
+            UIDropDownMenu_SetText(self.frame.presetDropdown, "Select")
+        end
+    end
+    if self.frame and self.frame.presetNameBox and name and not self.frame.presetNameBox:HasFocus() then
+        self.frame.presetNameBox:SetText(name)
+    end
+end
+
+function FT:SavePreset(name)
+    if self.running then
+        self:Print("Stop the timer before saving a preset.")
+        return
+    end
+
+    name = self:NormalizePresetName(name)
+    if not name then
+        self:Print("Please enter a preset name.")
+        return
+    end
+
+    local items = {}
+    for _, item in ipairs(self.db.items) do
+        if self:IsValidItem(item) then
+            table.insert(items, { itemID = tonumber(item.itemID), target = tonumber(item.target) })
+        end
+    end
+
+    if #items == 0 then
+        self:Print("No valid items to save.")
+        return
+    end
+
+    self.accountDb.presets[name] = items
+    self.db.lastPreset = name
+    self:SetSelectedPreset(name)
+    if self.RefreshPresetDropdown then
+        self:RefreshPresetDropdown()
+    end
+    self:Print("Preset saved: " .. name)
+end
+
+function FT:LoadPreset(name)
+    if self.running then
+        self:Print("Stop the timer before loading a preset.")
+        return
+    end
+
+    name = self:NormalizePresetName(name)
+    if not name then
+        name = self:NormalizePresetName(self.selectedPreset)
+    end
+    if not name then
+        self:Print("Please select a preset.")
+        return
+    end
+
+    local preset = self.accountDb.presets[name]
+    if not preset then
+        self:Print("Preset not found: " .. name)
+        return
+    end
+
+    local items = {}
+    for _, entry in ipairs(preset) do
+        local itemID = tonumber(entry.itemID)
+        local target = tonumber(entry.target)
+        if itemID and itemID > 0 and target and target > 0 then
+            table.insert(items, { itemID = itemID, target = target })
+        end
+    end
+
+    self.db.items = items
+    self.db.lastPreset = name
+    self.baseline = {}
+    for _, item in ipairs(self.db.items) do
+        item.current = 0
+    end
+    self.elapsed = 0
+
+    self:RefreshList()
+    if self.UpdateControls then
+        self:UpdateControls()
+    end
+    self:UpdateTimer()
+    self:SetSelectedPreset(name)
+    self:Print("Preset loaded: " .. name)
+end
+
+function FT:DeletePreset(name)
+    if self.running then
+        self:Print("Stop the timer before deleting a preset.")
+        return
+    end
+
+    name = self:NormalizePresetName(name)
+    if not name then
+        name = self:NormalizePresetName(self.selectedPreset)
+    end
+    if not name then
+        self:Print("Please select a preset.")
+        return
+    end
+
+    if not self.accountDb.presets[name] then
+        self:Print("Preset not found: " .. name)
+        return
+    end
+
+    self.accountDb.presets[name] = nil
+    if self.db.lastPreset == name then
+        self.db.lastPreset = nil
+    end
+    if self.selectedPreset == name then
+        self.selectedPreset = nil
+    end
+    if self.RefreshPresetDropdown then
+        self:RefreshPresetDropdown()
+    end
+    self:Print("Preset deleted: " .. name)
 end
 
 function FT:ResolveItemID(value)
