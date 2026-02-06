@@ -97,8 +97,10 @@ function FT:SavePreset(name)
 
     local items = {}
     for _, item in ipairs(self.db.items) do
-        if self:IsValidItem(item) then
-            table.insert(items, { itemID = tonumber(item.itemID), target = tonumber(item.target) })
+        local itemID = self:GetItemIDFromItem(item)
+        local target = tonumber(item.target)
+        if itemID and itemID > 0 and target and target > 0 then
+            table.insert(items, { itemID = itemID, target = target })
         end
     end
 
@@ -139,7 +141,7 @@ function FT:LoadPreset(name)
 
     local items = {}
     for _, entry in ipairs(preset) do
-        local itemID = tonumber(entry.itemID)
+        local itemID = self:ResolveItemID(entry.itemID)
         local target = tonumber(entry.target)
         if itemID and itemID > 0 and target and target > 0 then
             table.insert(items, { itemID = itemID, target = target })
@@ -218,6 +220,66 @@ function FT:ResolveItemID(value)
     return nil
 end
 
+function FT:GetItemIDFromItem(item)
+    if not item then
+        return nil
+    end
+    local itemID = self:ResolveItemID(item.itemID)
+    if itemID and item.itemID ~= itemID then
+        item.itemID = itemID
+    end
+    return itemID
+end
+
+function FT:GetBagItemCount(itemID)
+    if not itemID then
+        return 0
+    end
+
+    local total = 0
+    local function scanBag(bagID)
+        local numSlots
+        if C_Container and C_Container.GetContainerNumSlots then
+            numSlots = C_Container.GetContainerNumSlots(bagID)
+        elseif GetContainerNumSlots then
+            numSlots = GetContainerNumSlots(bagID)
+        end
+        if not numSlots or numSlots == 0 then
+            return
+        end
+
+        for slot = 1, numSlots do
+            if C_Container and C_Container.GetContainerItemInfo then
+                local info = C_Container.GetContainerItemInfo(bagID, slot)
+                if info and info.itemID == itemID then
+                    total = total + (info.stackCount or 1)
+                end
+            elseif GetContainerItemID and GetContainerItemInfo then
+                local id = GetContainerItemID(bagID, slot)
+                if id == itemID then
+                    local _, count = GetContainerItemInfo(bagID, slot)
+                    total = total + (count or 1)
+                end
+            end
+        end
+    end
+
+    local maxBag = _G.NUM_BAG_SLOTS or 4
+    for bag = 0, maxBag do
+        scanBag(bag)
+    end
+
+    local reagentBag = _G.REAGENTBAG_CONTAINER
+    if Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag then
+        reagentBag = Enum.BagIndex.ReagentBag
+    end
+    if reagentBag then
+        scanBag(reagentBag)
+    end
+
+    return total
+end
+
 function FT:FormatElapsed(seconds)
     seconds = math.max(0, math.floor(seconds or 0))
     if seconds >= 3600 then
@@ -235,7 +297,7 @@ function FT:IsValidItem(item)
     if not item then
         return false
     end
-    local itemID = tonumber(item.itemID)
+    local itemID = self:GetItemIDFromItem(item)
     local target = tonumber(item.target)
     return itemID and itemID > 0 and target and target > 0
 end
@@ -244,7 +306,7 @@ function FT:IsTrackableItem(item)
     if not item then
         return false
     end
-    local itemID = tonumber(item.itemID)
+    local itemID = self:GetItemIDFromItem(item)
     return itemID and itemID > 0
 end
 
@@ -293,8 +355,8 @@ function FT:StartRun()
     self.baseline = {}
     for i, item in ipairs(self.db.items) do
         if self:IsTrackableItem(item) then
-            local itemID = tonumber(item.itemID)
-            self.baseline[i] = GetItemCount(itemID, false)
+            local itemID = self:GetItemIDFromItem(item)
+            self.baseline[i] = self:GetBagItemCount(itemID)
         else
             self.baseline[i] = 0
         end
@@ -415,10 +477,10 @@ function FT:RefreshProgress()
         local current = 0
         if self:IsTrackableItem(item) then
             trackable = trackable + 1
-            local itemID = tonumber(item.itemID)
+            local itemID = self:GetItemIDFromItem(item)
             local base = self.baseline and self.baseline[i] or 0
             if self.running then
-                current = GetItemCount(itemID, false) - base
+                current = self:GetBagItemCount(itemID) - base
             else
                 current = 0
             end
