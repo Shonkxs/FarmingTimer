@@ -38,6 +38,9 @@ A simple WoW addon that tracks your farming time and stops automatically when al
 - **Load**: loads the selected preset.
 - **Delete**: deletes the selected preset.
 - **Use target amounts**: if enabled, timer auto-stops when all targets are met. If disabled, the timer runs and only counts items.
+- **Profiles**: opens the Profiles window for import/export.
+
+## Profiles Window
 - **Export All**: exports all presets into a shareable string.
 - **Export Selected**: exports only the currently selected preset.
 - **Import**: paste a previously exported string to restore presets.

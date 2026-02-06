@@ -407,8 +407,8 @@ function FT:ShowExportDialog(presetName)
         self:Print(err or "No presets available.")
         return
     end
-    if self.ShowTransferFrame then
-        self:ShowTransferFrame("export", exportString)
+    if self.ShowProfilesWindow then
+        self:ShowProfilesWindow("export", exportString)
         return
     end
     self:EnsurePopupDialogs()
@@ -422,8 +422,8 @@ function FT:ShowExportDialog(presetName)
 end
 
 function FT:ShowImportDialog()
-    if self.ShowTransferFrame then
-        self:ShowTransferFrame("import", "")
+    if self.ShowProfilesWindow then
+        self:ShowProfilesWindow("import", "")
         return
     end
     self:EnsurePopupDialogs()
