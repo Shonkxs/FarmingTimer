@@ -597,6 +597,49 @@ function FT:ResolveItemID(value)
     return nil
 end
 
+function FT:GetQualityTier(itemID)
+    if not itemID then
+        return nil
+    end
+    if C_TradeSkillUI then
+        if C_TradeSkillUI.GetItemReagentQualityByItemInfo then
+            local tier = C_TradeSkillUI.GetItemReagentQualityByItemInfo(itemID)
+            if tier and tier > 0 then
+                return tier
+            end
+        end
+        if C_TradeSkillUI.GetItemCraftedQualityByItemInfo then
+            local tier = C_TradeSkillUI.GetItemCraftedQualityByItemInfo(itemID)
+            if tier and tier > 0 then
+                return tier
+            end
+        end
+    end
+    return nil
+end
+
+function FT:GetQualityTierLabel(tier)
+    if tier == 1 then
+        return "I"
+    elseif tier == 2 then
+        return "II"
+    elseif tier == 3 then
+        return "III"
+    end
+    return tostring(tier or "")
+end
+
+function FT:GetQualityTierColor(tier)
+    if tier == 1 then
+        return 0.80, 0.55, 0.20
+    elseif tier == 2 then
+        return 0.75, 0.75, 0.75
+    elseif tier == 3 then
+        return 0.98, 0.82, 0.20
+    end
+    return 1, 1, 1
+end
+
 function FT:GetItemIDFromItem(item)
     if not item then
         return nil

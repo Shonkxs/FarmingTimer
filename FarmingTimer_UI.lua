@@ -343,6 +343,11 @@ function FT:CreateRow(index)
     row.itemButton.icon:SetAllPoints()
     row.itemButton.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
+    row.itemButton.qualityText = row.itemButton:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.itemButton.qualityText:SetPoint("BOTTOMRIGHT", -2, 2)
+    row.itemButton.qualityText:SetJustifyH("RIGHT")
+    row.itemButton.qualityText:Hide()
+
     row.itemButton:RegisterForClicks("LeftButtonUp")
     row.itemButton:RegisterForDrag("LeftButton")
     row.itemButton:SetScript("OnReceiveDrag", function()
@@ -443,6 +448,24 @@ function FT:UpdateRow(row)
     else
         row.itemButton.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
         row.itemButton.icon:SetDesaturated(true)
+    end
+
+    if row.itemButton.qualityText then
+        if itemID then
+            local tier = FT.GetQualityTier and FT:GetQualityTier(itemID) or nil
+            if tier and tier > 0 then
+                row.itemButton.qualityText:SetText(FT:GetQualityTierLabel(tier))
+                local r, g, b = FT:GetQualityTierColor(tier)
+                row.itemButton.qualityText:SetTextColor(r, g, b)
+                row.itemButton.qualityText:Show()
+            else
+                row.itemButton.qualityText:SetText("")
+                row.itemButton.qualityText:Hide()
+            end
+        else
+            row.itemButton.qualityText:SetText("")
+            row.itemButton.qualityText:Hide()
+        end
     end
 
     local current = tonumber(row.data.current) or 0
