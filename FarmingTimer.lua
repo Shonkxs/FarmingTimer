@@ -866,18 +866,69 @@ function FT:CollectLeafCategories(node, out)
     end
 end
 
-function FT:GetReagentFilterSets()
+function FT:GetTradegoodsSubclassFilters()
     local filterSets = {}
-    if type(_G.AuctionCategories) == "table" and _G.AUCTION_CATEGORY_TRADE_GOODS then
-        local tradeGoods = self:FindCategoryByName(_G.AuctionCategories, _G.AUCTION_CATEGORY_TRADE_GOODS)
-        if tradeGoods then
-            self:CollectLeafCategories(tradeGoods, filterSets)
-            if #filterSets == 0 and tradeGoods.filters then
-                table.insert(filterSets, { name = tradeGoods.name or "Reagents", filters = tradeGoods.filters })
+    if not (Enum and Enum.ItemClass and Enum.ItemClass.Tradegoods and Enum.ItemTradeGoodsSubclass) then
+        return filterSets
+    end
+    local classID = Enum.ItemClass.Tradegoods
+    for _, subClassID in pairs(Enum.ItemTradeGoodsSubclass) do
+        if type(subClassID) == "number" then
+            local name = nil
+            if GetItemSubClassInfo then
+                name = GetItemSubClassInfo(classID, subClassID)
+            end
+            table.insert(filterSets, {
+                name = name or ("Trade Goods " .. tostring(subClassID)),
+                filters = { { classID = classID, subClassID = subClassID } },
+            })
+        end
+    end
+    table.sort(filterSets, function(a, b)
+        return (a.name or "") < (b.name or "")
+    end)
+    return filterSets
+end
+
+function FT:FilterHasTradegoods(filters)
+    if type(filters) ~= "table" or not (Enum and Enum.ItemClass and Enum.ItemClass.Tradegoods) then
+        return false
+    end
+    for _, f in ipairs(filters) do
+        if f and f.classID == Enum.ItemClass.Tradegoods then
+            return true
+        end
+    end
+    return false
+end
+
+function FT:CollectTradegoodsCategories(categories, out)
+    if type(categories) ~= "table" then
+        return
+    end
+    for _, c in ipairs(categories) do
+        if c then
+            if self:FilterHasTradegoods(c.filters) then
+                table.insert(out, { name = c.name or "Reagents", filters = c.filters })
+            end
+            if c.subCategories then
+                self:CollectTradegoodsCategories(c.subCategories, out)
             end
         end
     end
+end
 
+function FT:GetReagentFilterSets()
+    local filterSets = {}
+    if type(_G.AuctionCategories) == "table" then
+        self:CollectTradegoodsCategories(_G.AuctionCategories, filterSets)
+    end
+    if #filterSets == 0 then
+        local subclassFilters = self:GetTradegoodsSubclassFilters()
+        if #subclassFilters > 0 then
+            return subclassFilters
+        end
+    end
     if #filterSets == 0 then
         if Enum and Enum.ItemClass and Enum.ItemClass.Tradegoods then
             table.insert(filterSets, { name = "Trade Goods", filters = { { classID = Enum.ItemClass.Tradegoods } } })
@@ -1138,6 +1189,7 @@ function FT:StartReagentScan()
         total = #filters,
         lastResultAt = GetTime(),
         querySentAt = 0,
+        maxCategorySeconds = 8,
     }
     self.ahScanReady = false
     if self.ShowScanProgress then
@@ -1213,6 +1265,31 @@ function FT:AdvanceReagentScanIfDone()
         return
     end
     local now = GetTime()
+    if self.ahScan.querySentAt and (now - self.ahScan.querySentAt) > (self.ahScan.maxCategorySeconds or 8) then
+        self.ahScan.lastResultAt = now
+        self.ahScan.index = self.ahScan.index + 1
+        if self.ahScan.index > self.ahScan.total then
+            self.ahScan.inProgress = false
+            self.ahScanReady = true
+            self:StopScanTicker()
+            if self.accountDb then
+                self.accountDb.ahScan = self.accountDb.ahScan or {}
+                self.accountDb.ahScan[self:GetRealmKey()] = self:GetServerTimestamp()
+            end
+            if self.ShowScanProgress then
+                self:ShowScanProgress(nil, "")
+            end
+            if self.UpdateRows then
+                self:UpdateRows(self.MODES.ALL)
+            end
+            if self.UpdateSummary then
+                self:UpdateSummary(self.MODES.ALL)
+            end
+            return
+        end
+        self:SendReagentBrowseQuery()
+        return
+    end
     local hasFull = C_AuctionHouse.HasFullBrowseResults and C_AuctionHouse.HasFullBrowseResults()
     if not hasFull then
         if C_AuctionHouse.RequestMoreBrowseResults then
