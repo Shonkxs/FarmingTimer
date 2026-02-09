@@ -82,12 +82,14 @@ function FT:GetModeState(mode)
             elapsed = 0,
             baseline = {},
             baselineCounts = {},
+            lastScan = 0,
         }
         self.modeStates[mode] = state
     end
     state.elapsed = state.elapsed or 0
     state.baseline = state.baseline or {}
     state.baselineCounts = state.baselineCounts or {}
+    state.lastScan = state.lastScan or 0
     return state
 end
 
@@ -747,34 +749,47 @@ function FT:FormatElapsed(seconds)
     return string.format("%02d:%02d", m, s)
 end
 
+function FT:GetBagIds()
+    local bagIds = {}
+    local seen = {}
+    local function add(id)
+        if id == nil or seen[id] then
+            return
+        end
+        seen[id] = true
+        table.insert(bagIds, id)
+    end
+
+    if Enum and Enum.BagIndex then
+        add(Enum.BagIndex.Backpack)
+        add(Enum.BagIndex.Bag1)
+        add(Enum.BagIndex.Bag2)
+        add(Enum.BagIndex.Bag3)
+        add(Enum.BagIndex.Bag4)
+        add(Enum.BagIndex.ReagentBag)
+    else
+        local maxBag = NUM_BAG_SLOTS or 0
+        for bag = 0, maxBag do
+            add(bag)
+        end
+        add(_G and _G.REAGENTBAG_CONTAINER)
+    end
+
+    return bagIds
+end
+
 function FT:ScanBagCounts()
     local counts = {}
     if not C_Container or not C_Container.GetContainerNumSlots then
         return counts
     end
-    local maxBag = NUM_BAG_SLOTS or 0
-    for bag = 0, maxBag do
+    for _, bag in ipairs(self:GetBagIds()) do
         local numSlots = C_Container.GetContainerNumSlots(bag)
         if numSlots and numSlots > 0 then
             for slot = 1, numSlots do
-                local itemID = C_Container.GetContainerItemID(bag, slot)
+                local info = C_Container.GetContainerItemInfo(bag, slot)
+                local itemID = info and info.itemID or (C_Container.GetContainerItemID and C_Container.GetContainerItemID(bag, slot))
                 if itemID then
-                    local info = C_Container.GetContainerItemInfo(bag, slot)
-                    local stack = (info and info.stackCount) or 1
-                    counts[itemID] = (counts[itemID] or 0) + stack
-                end
-            end
-        end
-    end
-
-    local reagentBag = _G and _G.REAGENTBAG_CONTAINER
-    if reagentBag and reagentBag > maxBag then
-        local numSlots = C_Container.GetContainerNumSlots(reagentBag)
-        if numSlots and numSlots > 0 then
-            for slot = 1, numSlots do
-                local itemID = C_Container.GetContainerItemID(reagentBag, slot)
-                if itemID then
-                    local info = C_Container.GetContainerItemInfo(reagentBag, slot)
                     local stack = (info and info.stackCount) or 1
                     counts[itemID] = (counts[itemID] or 0) + stack
                 end
@@ -901,6 +916,7 @@ function FT:StartRun(mode)
     else
         state.baselineCounts = self:ScanBagCounts()
         self.db.allItems = {}
+        state.lastScan = 0
     end
 
     self:SetActiveMode(mode)
@@ -1023,6 +1039,14 @@ function FT:UpdateTimer(mode)
     end
     if self.SetTimerText then
         self:SetTimerText(self:FormatElapsed(elapsed))
+    end
+
+    if mode == self.MODES.ALL and state.running then
+        local now = GetTime()
+        if now - (state.lastScan or 0) >= 0.5 then
+            state.lastScan = now
+            self:RefreshProgress(mode)
+        end
     end
 end
 
